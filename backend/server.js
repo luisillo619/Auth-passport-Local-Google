@@ -4,15 +4,17 @@ const mongoose = require("mongoose");
 const express = require("express");
 const cors = require("cors");
 const passport = require("passport");
-// const passportLocal = require("passport-local").Strategy;
 const cookieParser = require("cookie-parser");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
+const MongoStore = require('connect-mongodb-session')(session);
 const bodyParser = require("body-parser");
 const app = express();
 const User = require("./user");
+
 //----------------------------------------- END OF IMPORTS---------------------------------------------------
-mongoose.connect(
+
+const connection = mongoose.connect(
   MONGO_URL,
   {
     useNewUrlParser: true,
@@ -29,16 +31,44 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
     origin: FRONT_URL, // <-- location of the react app were connecting to
+    methods: "GET,POST,PUT,DELETE",
     credentials: true,
   })
 );
-app.use(
-  session({
-    secret: SECRET_SESSION,
-    resave: true,
-    saveUninitialized: true,
-  })
-);
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", FRONT_URL);
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept"
+  );
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  next();
+});
+
+const store = new MongoStore({
+  uri: MONGO_URL,
+  collection: 'sessions',
+  expires: 1000 * 60 * 60 * 24 // tiempo de expiración de la sesión
+});
+
+app.set('trust proxy', 1);
+
+app.use(session({
+  secret: SECRET_SESSION,
+  resave: false,
+  saveUninitialized: true,
+  store: store,
+  cookie: {
+    maxAge: 1000 * 60 * 60 * 24, // tiempo de vida de la cookie
+    httpOnly: true,
+    secure: false,
+    sameSite: 'lax',
+    // domain: '.vercel.app' // Establecer el dominio de la cookie
+  }
+}));
+
 app.use(cookieParser(SECRET_SESSION));
 app.use(passport.initialize());
 app.use(passport.session());
@@ -56,7 +86,7 @@ app.post("/login", (req, res, next) => {
       req.logIn(user, (err) => {
         if (err) throw err;
         res.send("Successfully Authenticated");
-        console.log(req.user);
+     
       });
     }
   })(req, res, next);
@@ -110,6 +140,9 @@ app.post('/logout', (req, res) => {
 
 //----------------------------------------- END OF ROUTES---------------------------------------------------
 //Start Server
-app.listen(4000, () => {
-  console.log("Server Has Started");
-});
+const PORT = process.env.PORT || 4000
+  
+    app.listen(PORT, () => {
+      console.log(`Server is listening on PORT: ${PORT}`);
+    });
+
